@@ -13,8 +13,9 @@ from typing import Optional
 
 import whisper
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # ============== CONFIG ==============
@@ -106,10 +107,15 @@ def run_ffmpeg(cmd: list) -> tuple[bool, str]:
 
 # ============== ENDPOINTS ==============
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """API health check"""
-    return {
+    """Serve the HTML frontend"""
+    html_file = Path("index.html")
+    if html_file.exists():
+        return HTMLResponse(content=html_file.read_text(encoding="utf-8"))
+    
+    # Fallback API info if no HTML
+    return JSONResponse({
         "status": "online",
         "message": "Video Processing API",
         "version": "1.0.0",
@@ -118,18 +124,20 @@ async def root():
             "subtitle": "/api/subtitle",
             "download": "/api/download/{file_id}"
         }
-    }
+    })
 
 @app.post("/api/trim", response_model=TrimResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def trim_video(
-    video: UploadFile = File(..., description="Video file to trim"),
+    video: Optional[UploadFile] = File(None, description="Video file to trim"),
+    file_path: Optional[str] = Form(None, description="Full path to existing video file (e.g., C://eugene/files/file.mp4)"),
     start_time: float = Form(..., description="Start time in seconds", ge=0),
     end_time: float = Form(..., description="End time in seconds", gt=0),
 ):
     """
     Trim a video from start_time to end_time
     
-    - **video**: Upload video file
+    - **video**: Upload video file OR
+    - **file_path**: Specify full path to existing video file (supports Windows paths like C://folder/file.mp4)
     - **start_time**: Start time in seconds (e.g., 5.5 for 5.5 seconds)
     - **end_time**: End time in seconds (e.g., 30.0 for 30 seconds)
     
@@ -137,23 +145,38 @@ async def trim_video(
     """
     check_ffmpeg()
     
+    # Must have either video or file_path
+    if not video and not file_path:
+        raise HTTPException(status_code=400, detail="Must provide either 'video' file or 'file_path'")
+    
     # Validate times
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="end_time must be greater than start_time")
     
     # Generate unique ID
     file_id = str(uuid.uuid4())
-    
-    # Save uploaded file
-    file_ext = Path(video.filename).suffix or ".mp4"
-    input_path = UPLOAD_DIR / f"{file_id}_input{file_ext}"
-    output_path = OUTPUT_DIR / f"{file_id}_trimmed{file_ext}"
+    input_path = None
     
     try:
-        # Save upload
-        with open(input_path, "wb") as f:
-            content = await video.read()
-            f.write(content)
+        # Determine input path
+        if video:
+            file_ext = Path(video.filename).suffix or ".mp4"
+            input_path = UPLOAD_DIR / f"{file_id}_input{file_ext}"
+            
+            # Save upload
+            with open(input_path, "wb") as f:
+                content = await video.read()
+                f.write(content)
+        else:
+            # Handle file path - normalize Windows/Unix paths
+            normalized_path = file_path.replace("\\", "/")
+            input_path = Path(normalized_path)
+            
+            if not input_path.exists():
+                raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
+            file_ext = input_path.suffix
+        
+        output_path = OUTPUT_DIR / f"{file_id}_trimmed{file_ext}"
         
         # Calculate duration
         duration = end_time - start_time
@@ -173,8 +196,9 @@ async def trim_video(
         if not success:
             raise HTTPException(status_code=500, detail=f"FFmpeg error: {error}")
         
-        # Clean up input
-        input_path.unlink()
+        # Clean up input only if it was uploaded
+        if video and input_path.exists():
+            input_path.unlink()
         
         return TrimResponse(
             success=True,
@@ -188,7 +212,7 @@ async def trim_video(
         raise
     except Exception as e:
         # Clean up on error
-        if input_path.exists():
+        if video and input_path and input_path.exists():
             input_path.unlink()
         if output_path.exists():
             output_path.unlink()
@@ -197,14 +221,14 @@ async def trim_video(
 @app.post("/api/subtitle", response_model=SubtitleResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def generate_subtitles(
     video: Optional[UploadFile] = File(None, description="Video file (if not using file_path)"),
-    file_path: Optional[str] = Form(None, description="Path to existing video file"),
+    file_path: Optional[str] = Form(None, description="Full path to existing video file (e.g., C://eugene/files/file.mp4)"),
     language: str = Form("en", description="Language code (e.g., 'en', 'es', 'fr')"),
 ):
     """
     Generate subtitles for a video and burn them into the video
     
     - **video**: Upload video file OR
-    - **file_path**: Specify path to existing video file
+    - **file_path**: Specify full path to existing video file (supports Windows paths like C://folder/file.mp4)
     - **language**: Language code for transcription (default: 'en')
     
     Returns download URLs for both the subtitled video and SRT file
@@ -216,6 +240,7 @@ async def generate_subtitles(
         raise HTTPException(status_code=400, detail="Must provide either 'video' file or 'file_path'")
     
     file_id = str(uuid.uuid4())
+    input_path = None
     
     try:
         # Determine input path
@@ -228,7 +253,10 @@ async def generate_subtitles(
                 content = await video.read()
                 f.write(content)
         else:
-            input_path = Path(file_path)
+            # Handle file path - normalize Windows/Unix paths
+            normalized_path = file_path.replace("\\", "/")
+            input_path = Path(normalized_path)
+            
             if not input_path.exists():
                 raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
             file_ext = input_path.suffix
@@ -252,32 +280,40 @@ async def generate_subtitles(
         
         # Burn subtitles into video
         print("Burning subtitles...")
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", str(input_path),
-            "-vf", f"subtitles={srt_path.name}",
-            "-c:a", "copy",
-            str(output_video)
-        ]
         
-        # Run in output directory to avoid path issues
-        success, error = run_ffmpeg(cmd)
-        
-        if not success:
-            # Try alternative method if subtitles filter fails
-            print("Trying alternative subtitle method...")
+        # Change to output directory and use relative paths to avoid Windows path issues
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(OUTPUT_DIR)
+            
+            # Use relative paths
             cmd = [
                 "ffmpeg", "-y",
-                "-i", str(input_path),
-                "-i", str(srt_path),
-                "-c", "copy",
-                "-c:s", "mov_text",
-                str(output_video)
+                "-i", str(input_path.resolve()),
+                "-vf", f"subtitles={srt_path.name}",
+                "-c:a", "copy",
+                output_video.name
             ]
+            
             success, error = run_ffmpeg(cmd)
             
             if not success:
-                raise HTTPException(status_code=500, detail=f"FFmpeg error: {error}")
+                # Try alternative method if subtitles filter fails
+                print("Trying alternative subtitle method...")
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", str(input_path.resolve()),
+                    "-i", srt_path.name,
+                    "-c", "copy",
+                    "-c:s", "mov_text",
+                    output_video.name
+                ]
+                success, error = run_ffmpeg(cmd)
+                
+                if not success:
+                    raise HTTPException(status_code=500, detail=f"FFmpeg error: {error}")
+        finally:
+            os.chdir(original_cwd)
         
         # Clean up input if it was uploaded
         if video and input_path.exists():
@@ -297,9 +333,12 @@ async def generate_subtitles(
         raise
     except Exception as e:
         # Clean up on error
-        for p in [input_path, srt_path, output_video]:
-            if p.exists() and video:  # Only clean uploaded files
-                p.unlink()
+        if video and input_path and input_path.exists():
+            input_path.unlink()
+        if srt_path.exists():
+            srt_path.unlink()
+        if output_video.exists():
+            output_video.unlink()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/download/{filename}")
