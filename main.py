@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
-HISTORY_FILE = Path("history.json")
+HISTORY_FILE = Path("outputs/history.json")
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
