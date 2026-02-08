@@ -169,6 +169,39 @@
             border-radius: 5px;
             margin-bottom: 20px;
         }
+
+        .history-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .history-item.trim {
+            border-left-color: #28a745;
+        }
+
+        .history-item.subtitle {
+            border-left-color: #667eea;
+        }
+
+        .history-item h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .history-item p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .history-item small {
+            color: #999;
+            font-size: 12px;
+        }
     </style>
 </head>
 
@@ -180,6 +213,15 @@
             <strong>API Base URL:</strong> <span id="apiUrl">http://localhost:8000</span> |
             <a href="http://localhost:8000/docs" target="_blank"
                 style="color: #0c5460; text-decoration: underline;">View API Docs</a>
+        </div>
+
+        <!-- History Card -->
+        <div class="card">
+            <h2>📜 Processing History</h2>
+            <button onclick="loadHistory()" style="margin-bottom: 15px;">🔄 Refresh History</button>
+            <div id="historyContainer" style="max-height: 400px; overflow-y: auto;">
+                <p style="color: #666;">Loading history...</p>
+            </div>
         </div>
 
         <!-- Trim Video Card -->
@@ -262,6 +304,63 @@
 
     <script>
         const API_URL = 'http://localhost:8000';
+
+        // Load history on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadHistory();
+        });
+
+        // Load history function
+        async function loadHistory() {
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '<p style="color: #666;">Loading...</p>';
+
+            try {
+                const response = await fetch(`${API_URL}/api/history`);
+                const data = await response.json();
+                const history = data.history || [];
+
+                if (history.length === 0) {
+                    container.innerHTML = '<p style="color: #666;">No processing history yet.</p>';
+                    return;
+                }
+
+                container.innerHTML = history.map(item => {
+                    const date = new Date(item.timestamp);
+                    const formattedDate = date.toLocaleString();
+
+                    if (item.type === 'trim') {
+                        return `
+                            <div class="history-item trim">
+                                <h3>✂️ Video Trim</h3>
+                                <p><strong>File:</strong> ${item.input_file}</p>
+                                <p><strong>Trimmed:</strong> ${item.start_time}s - ${item.end_time}s (${item.duration.toFixed(1)}s)</p>
+                                <small>${formattedDate}</small>
+                                <div class="download-links">
+                                    <a href="${API_URL}${item.download_url}" download>⬇️ Download</a>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="history-item subtitle">
+                                <h3>📝 Subtitle Generation</h3>
+                                <p><strong>File:</strong> ${item.input_file}</p>
+                                <p><strong>Language:</strong> ${item.language}</p>
+                                <small>${formattedDate}</small>
+                                <div class="download-links">
+                                    <a href="${API_URL}${item.video_download_url}" download>⬇️ Video</a>
+                                    <a href="${API_URL}${item.srt_download_url}" download>📄 SRT</a>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }).join('');
+
+            } catch (error) {
+                container.innerHTML = `<p style="color: #721c24;">Error loading history: ${error.message}</p>`;
+            }
+        }
 
         // Trim Video Handler
         document.getElementById('trimForm').addEventListener('submit', async (e) => {
@@ -374,6 +473,8 @@
                             File ID: ${data.file_id}
                         </p>
                     `;
+                    // Reload history
+                    loadHistory();
                 } else {
                     throw new Error(data.error || 'Unknown error');
                 }

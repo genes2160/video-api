@@ -8,6 +8,8 @@ import os
 import shutil
 import subprocess
 import uuid
+import json
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,8 +24,14 @@ from pydantic import BaseModel
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
+HISTORY_FILE = Path("history.json")
+
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+# Initialize history file
+if not HISTORY_FILE.exists():
+    HISTORY_FILE.write_text("[]", encoding="utf-8")
 
 # Load Whisper model once at startup
 print("Loading Whisper model...")
@@ -105,6 +113,24 @@ def run_ffmpeg(cmd: list) -> tuple[bool, str]:
     except Exception as e:
         return False, str(e)
 
+def save_to_history(entry: dict):
+    """Save processing entry to history"""
+    try:
+        history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        history.insert(0, entry)  # Add to beginning
+        # Keep only last 100 entries
+        history = history[:100]
+        HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"Error saving to history: {e}")
+
+def get_history():
+    """Get processing history"""
+    try:
+        return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
 # ============== ENDPOINTS ==============
 
 @app.get("/", response_class=HTMLResponse)
@@ -122,9 +148,15 @@ async def root():
         "endpoints": {
             "trim": "/api/trim",
             "subtitle": "/api/subtitle",
-            "download": "/api/download/{file_id}"
+            "download": "/api/download/{file_id}",
+            "history": "/api/history"
         }
     })
+
+@app.get("/api/history")
+async def get_history_endpoint():
+    """Get processing history"""
+    return {"history": get_history()}
 
 @app.post("/api/trim", response_model=TrimResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def trim_video(
@@ -199,6 +231,19 @@ async def trim_video(
         # Clean up input only if it was uploaded
         if video and input_path.exists():
             input_path.unlink()
+        
+        # Save to history
+        save_to_history({
+            "type": "trim",
+            "file_id": file_id,
+            "timestamp": datetime.now().isoformat(),
+            "input_file": video.filename if video else file_path,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": duration,
+            "output_file": f"{file_id}_trimmed{file_ext}",
+            "download_url": f"/api/download/{file_id}_trimmed{file_ext}"
+        })
         
         return TrimResponse(
             success=True,
@@ -318,6 +363,19 @@ async def generate_subtitles(
         # Clean up input if it was uploaded
         if video and input_path.exists():
             input_path.unlink()
+        
+        # Save to history
+        save_to_history({
+            "type": "subtitle",
+            "file_id": file_id,
+            "timestamp": datetime.now().isoformat(),
+            "input_file": video.filename if video else file_path,
+            "language": language,
+            "output_video": f"{file_id}_subbed{file_ext}",
+            "output_srt": f"{file_id}.srt",
+            "video_download_url": f"/api/download/{file_id}_subbed{file_ext}",
+            "srt_download_url": f"/api/download/{file_id}.srt"
+        })
         
         return SubtitleResponse(
             success=True,
