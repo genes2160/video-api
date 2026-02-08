@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -35,7 +36,7 @@
             border-radius: 10px;
             padding: 30px;
             margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         }
 
         h2 {
@@ -67,7 +68,8 @@
             transition: border-color 0.3s;
         }
 
-        input:focus, select:focus {
+        input:focus,
+        select:focus {
             outline: none;
             border-color: #667eea;
         }
@@ -150,8 +152,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .info {
@@ -164,13 +171,15 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>🎬 Video Processing API</h1>
 
         <div class="info">
-            <strong>API Base URL:</strong> <span id="apiUrl">http://localhost:8000</span> | 
-            <a href="http://localhost:8000/docs" target="_blank" style="color: #0c5460; text-decoration: underline;">View API Docs</a>
+            <strong>API Base URL:</strong> <span id="apiUrl">http://localhost:8000</span> |
+            <a href="http://localhost:8000/docs" target="_blank"
+                style="color: #0c5460; text-decoration: underline;">View API Docs</a>
         </div>
 
         <!-- Trim Video Card -->
@@ -180,6 +189,16 @@
                 <div class="form-group">
                     <label for="trimVideo">Select Video File:</label>
                     <input type="file" id="trimVideo" accept="video/*" required>
+                </div>
+                <div style="text-align: center; margin: 15px 0; color: #666; font-weight: 500;">
+                    - OR -
+                </div>
+                <div class="form-group">
+                    <label for="trimvideoPath">Enter Full File Path:</label>
+                    <input type="text" id="trimvideoPath" placeholder="C://eugene/files/video.mp4 or /home/user/video.mp4">
+                    <small style="color: #666; margin-top: 5px; display: block;">
+                        Use forward slashes (/) for paths. Works with both Windows (C://folder/file.mp4) and Unix paths.
+                    </small>
                 </div>
                 <div class="form-group">
                     <label for="startTime">Start Time (seconds):</label>
@@ -204,7 +223,17 @@
             <form id="subtitleForm">
                 <div class="form-group">
                     <label for="subtitleVideo">Select Video File:</label>
-                    <input type="file" id="subtitleVideo" accept="video/*" required>
+                    <input type="file" id="subtitleVideo" accept="video/*">
+                </div>
+                <div style="text-align: center; margin: 15px 0; color: #666; font-weight: 500;">
+                    - OR -
+                </div>
+                <div class="form-group">
+                    <label for="videoPath">Enter Full File Path:</label>
+                    <input type="text" id="videoPath" placeholder="C://eugene/files/video.mp4 or /home/user/video.mp4">
+                    <small style="color: #666; margin-top: 5px; display: block;">
+                        Use forward slashes (/) for paths. Works with both Windows (C://folder/file.mp4) and Unix paths.
+                    </small>
                 </div>
                 <div class="form-group">
                     <label for="language">Language:</label>
@@ -237,18 +266,20 @@
         // Trim Video Handler
         document.getElementById('trimForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const videoFile = document.getElementById('trimVideo').files[0];
+            const videoPath = document.getElementById('trimvideoPath').value;
             const startTime = document.getElementById('startTime').value;
             const endTime = document.getElementById('endTime').value;
-            
-            if (!videoFile) {
-                alert('Please select a video file');
+
+            if (!videoFile && !videoPath) {
+                alert('Please select a video file or enter a file path');
                 return;
             }
 
             const formData = new FormData();
             formData.append('video', videoFile);
+            formData.append('file_path', videoPath);
             formData.append('start_time', startTime);
             formData.append('end_time', endTime);
 
@@ -267,7 +298,7 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (data.success) {
                     result.className = 'result success';
                     result.innerHTML = `
@@ -295,17 +326,24 @@
         // Generate Subtitles Handler
         document.getElementById('subtitleForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const videoFile = document.getElementById('subtitleVideo').files[0];
+            const videoPath = document.getElementById('videoPath').value.trim();
             const language = document.getElementById('language').value;
-            
-            if (!videoFile) {
-                alert('Please select a video file');
+
+            // Must have either file or path
+            if (!videoFile && !videoPath) {
+                alert('Please select a video file or enter a file path');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('video', videoFile);
+
+            if (videoFile) {
+                formData.append('video', videoFile);
+            } else {
+                formData.append('file_path', videoPath);
+            }
             formData.append('language', language);
 
             const loading = document.getElementById('subtitleLoading');
@@ -323,7 +361,7 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (data.success) {
                     result.className = 'result success';
                     result.innerHTML = `
@@ -350,4 +388,5 @@
         });
     </script>
 </body>
+
 </html>
