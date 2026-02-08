@@ -213,20 +213,39 @@ async def trim_video(
         # Calculate duration
         duration = end_time - start_time
         
-        # Trim video
+        # Trim video (temp file)
+        temp_output = OUTPUT_DIR / f"{file_id}_temp{file_ext}"
         cmd = [
             "ffmpeg", "-y",
             "-ss", str(start_time),
             "-i", str(input_path),
             "-t", str(duration),
             "-c", "copy",
+            str(temp_output)
+        ]
+        
+        success, error = run_ffmpeg(cmd)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail=f"FFmpeg trim error: {error}")
+        
+        # Convert to MP4
+        output_path = OUTPUT_DIR / f"{file_id}_trimmed.mp4"
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(temp_output),
+            "-c:v", "libx264",
+            "-c:a", "aac",
             str(output_path)
         ]
         
         success, error = run_ffmpeg(cmd)
         
         if not success:
-            raise HTTPException(status_code=500, detail=f"FFmpeg error: {error}")
+            raise HTTPException(status_code=500, detail=f"FFmpeg convert error: {error}")
+        
+        # Clean up temp file
+        temp_output.unlink()
         
         # Clean up input only if it was uploaded
         if video and input_path.exists():
@@ -241,15 +260,15 @@ async def trim_video(
             "start_time": start_time,
             "end_time": end_time,
             "duration": duration,
-            "output_file": f"{file_id}_trimmed{file_ext}",
-            "download_url": f"/api/download/{file_id}_trimmed{file_ext}"
+            "output_file": f"{file_id}_trimmed.mp4",
+            "download_url": f"/api/download/{file_id}_trimmed.mp4"
         })
         
         return TrimResponse(
             success=True,
             message="Video trimmed successfully",
             file_id=file_id,
-            download_url=f"/api/download/{file_id}_trimmed{file_ext}",
+            download_url=f"/api/download/{file_id}_trimmed.mp4",
             file_path=str(output_path)
         )
         
