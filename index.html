@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Processing API - Test Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="file"],
+        input[type="number"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e1e1;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .download-links {
+            margin-top: 15px;
+        }
+
+        .download-links a {
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .download-links a:hover {
+            background: #764ba2;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Video Processing API</h1>
+
+        <div class="info">
+            <strong>API Base URL:</strong> <span id="apiUrl">http://localhost:8000</span> | 
+            <a href="http://localhost:8000/docs" target="_blank" style="color: #0c5460; text-decoration: underline;">View API Docs</a>
+        </div>
+
+        <!-- Trim Video Card -->
+        <div class="card">
+            <h2>✂️ Trim Video</h2>
+            <form id="trimForm">
+                <div class="form-group">
+                    <label for="trimVideo">Select Video File:</label>
+                    <input type="file" id="trimVideo" accept="video/*" required>
+                </div>
+                <div class="form-group">
+                    <label for="startTime">Start Time (seconds):</label>
+                    <input type="number" id="startTime" step="0.1" min="0" value="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="endTime">End Time (seconds):</label>
+                    <input type="number" id="endTime" step="0.1" min="0.1" value="10" required>
+                </div>
+                <button type="submit">Trim Video</button>
+            </form>
+            <div class="loading" id="trimLoading">
+                <div class="spinner"></div>
+                <p>Processing video...</p>
+            </div>
+            <div class="result" id="trimResult"></div>
+        </div>
+
+        <!-- Generate Subtitles Card -->
+        <div class="card">
+            <h2>📝 Generate Subtitles</h2>
+            <form id="subtitleForm">
+                <div class="form-group">
+                    <label for="subtitleVideo">Select Video File:</label>
+                    <input type="file" id="subtitleVideo" accept="video/*" required>
+                </div>
+                <div class="form-group">
+                    <label for="language">Language:</label>
+                    <select id="language">
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                    </select>
+                </div>
+                <button type="submit">Generate Subtitles</button>
+            </form>
+            <div class="loading" id="subtitleLoading">
+                <div class="spinner"></div>
+                <p>Generating subtitles... This may take a few minutes.</p>
+            </div>
+            <div class="result" id="subtitleResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        // Trim Video Handler
+        document.getElementById('trimForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const videoFile = document.getElementById('trimVideo').files[0];
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            if (!videoFile) {
+                alert('Please select a video file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('video', videoFile);
+            formData.append('start_time', startTime);
+            formData.append('end_time', endTime);
+
+            const loading = document.getElementById('trimLoading');
+            const result = document.getElementById('trimResult');
+            const submitBtn = e.target.querySelector('button');
+
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/api/trim`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        <strong>✅ ${data.message}</strong>
+                        <div class="download-links">
+                            <a href="${API_URL}${data.download_url}" download>⬇️ Download Trimmed Video</a>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                            File ID: ${data.file_id}
+                        </p>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+            } finally {
+                loading.style.display = 'none';
+                result.style.display = 'block';
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Generate Subtitles Handler
+        document.getElementById('subtitleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const videoFile = document.getElementById('subtitleVideo').files[0];
+            const language = document.getElementById('language').value;
+            
+            if (!videoFile) {
+                alert('Please select a video file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('video', videoFile);
+            formData.append('language', language);
+
+            const loading = document.getElementById('subtitleLoading');
+            const result = document.getElementById('subtitleResult');
+            const submitBtn = e.target.querySelector('button');
+
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/api/subtitle`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        <strong>✅ ${data.message}</strong>
+                        <div class="download-links">
+                            <a href="${API_URL}${data.video_download_url}" download>⬇️ Download Video with Subtitles</a>
+                            <a href="${API_URL}${data.srt_download_url}" download>📄 Download SRT File</a>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                            File ID: ${data.file_id}
+                        </p>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+            } finally {
+                loading.style.display = 'none';
+                result.style.display = 'block';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
